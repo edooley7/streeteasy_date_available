@@ -4,40 +4,37 @@ import pandas as pd
 import numpy as np
 import requests
 from bs4 import BeautifulSoup
-import urllib
+from urllib.request import urlopen
 import datetime
 import time
 
 # List your parameters as strings
 # Get area numbers by searching StreetEasy for your desired location and looking in the address bar
 # Also use search bar to identify if new parameters are needed
-max_price = "2800"
-area = "102,305,302"
+price = "3500-6000"
+area = "117,109,107"
 min_beds = "1"
-no_fee = "1" # 1 gets only no fee apartment listings
+no_fee = "" # 1 gets only no fee apartment listings; leave blank if no preference 
 
-
-def create_search_url(max_price, area, min_beds, no_fee):
+def create_search_url(price, area, min_beds, no_fee):
     start = 'http://streeteasy.com/for-rent/nyc/status:open'
-    price_param = "%7Cprice:-"
+    price_param = "%7Cprice:"
     area_param = "%7Carea:"
     beds_param = "%7Cbeds%3E="
     fee_param = "%7Cno_fee:"
     page_param = "?page="
-    url = start + price_param + max_price + area_param + area + beds_param + min_beds + fee_param + no_fee + page_param
+    url = start + price_param + price + area_param + area + beds_param + min_beds + fee_param + no_fee + page_param
     return url
 
-
-search_url = create_search_url(max_price, area, min_beds, no_fee)
-
+search_url = create_search_url(price, area, min_beds, no_fee)
 
 def create_page_url(page):
     return  search_url + str(page)
 
-
 # Get number of listings from first search page
+# FYI urllib: http://stackoverflow.com/questions/2792650
 url = create_page_url(1)
-r = urllib.urlopen(url)
+r = urlopen(url)
 if r.getcode() == "404":
     time.sleep(1)
 else:
@@ -52,7 +49,7 @@ links = []
 for page in range(1, num_pages + 1):
     print("Pages percent done: ", round(page/num_pages,3)*100)
     url = create_page_url(page)
-    r = urllib.urlopen(url)
+    r = urlopen(url)
     if r.getcode() == "404":
         time.sleep(1)
     else:
@@ -69,8 +66,8 @@ for page in range(1, num_pages + 1):
 # Go to each page and extract date available 
 avails = {}
 for i, link in enumerate(links):
-    print("Listings percent done: ", round(i/len(links),3)*100)
-    r =urllib.urlopen("http://streeteasy.com" + link)
+    print("Dates percent done: ", round(i/len(links),3)*100)
+    r =urlopen("http://streeteasy.com" + link)
     if r.getcode() == "404":
         time.sleep(1)
     else:
@@ -81,19 +78,36 @@ for i, link in enumerate(links):
         if "Available on" in text_div_set:
             index = text_div_set.index("Available on")
             date = div_set[index].parent.text.split("\n")[2].strip()
-            avails["www.streeteasy.com" + link] = date
+            avails["http://streeteasy.com" + link] = date
         elif "Listing Availability" in text_div_set:
             index = text_div_set.index("Listing Availability")
             date = div_set[index].parent.text.split("\n")[2].strip()
-            avails["www.streeteasy.com" + link] = date
+            avails["http://streeteasy.com" + link] = date
         else:
-            avails["www.streeteasy.com" + link] = np.nan
+            avails["http://streeteasy.com" + link] = np.nan
+
+# Go to each page and extract price
+prices = {}
+for i, link in enumerate(links):
+    print("Prices percent done: ", round(i/len(links),3)*100)
+    r =urlopen("http://streeteasy.com" + link)
+    if r.getcode() == "404":
+        time.sleep(1)
+    else:
+        r = r.read()
+        soup = BeautifulSoup(r,'html.parser')
+        div_set = soup.find_all('div',{'class':'price '})[0]
+        price = div_set.parent.text.split("\n")[3].strip()
+        prices["http://streeteasy.com" + link] = price
 
 # Create dataframe from results
-df = pd.DataFrame.from_dict(avails, orient = "index").reset_index()
-df.columns = ['link', 'avail']
+df1 = pd.DataFrame.from_dict(avails, orient = "index").reset_index()
+df1.columns = ['link', 'avail']
+df2 = pd.DataFrame.from_dict(prices, orient = "index").reset_index()
+df2.columns = ['link', 'price']
+df = pd.merge(df1, df2, on = 'link')
 df = df.sort("avail", na_position = "last")
 
 # Write to file with date in filename
-today = datetime.datetime.now().date().strftime("%m.%d")
+today = datetime.datetime.now().date().strftime("%m_%d")
 df.to_csv(today + "_listings.csv", index = False) 
