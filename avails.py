@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from __future__ import print_function
 from __future__ import division
 import pandas as pd
@@ -8,13 +10,29 @@ from urllib.request import urlopen
 import datetime
 import time
 
+# Run from command line
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description = "StreetEasy Apartment Finder")
+    parser.add_argument("--outfile")
+    parser.add_argument("--area")
+    parser.add_argument("--min_price", default = "")
+    parser.add_argument("--max_price")
+    parser.add_argument("--min_beds", default = "")
+    parser.add_argument("--no_fee", default = "")
+    args = parser.parse_args()
+
+print(args)
+
+# TODO: make it possible to search for student/1 bedroom
+
 # List your parameters as strings
 # Get area numbers by searching StreetEasy for your desired location and looking in the address bar
 # Also use search bar to identify if new parameters are needed
-price = "3500-6000"
-area = "117,109,107"
-min_beds = "1"
-no_fee = "" # 1 gets only no fee apartment listings; leave blank if no preference 
+price = args.min_price+"-"+args.max_price
+area = args.area
+min_beds = args.min_beds
+no_fee = args.no_fee # 1 gets only no fee apartment listings; leave blank if no preference 
 
 def create_search_url(price, area, min_beds, no_fee):
     start = 'http://streeteasy.com/for-rent/nyc/status:open'
@@ -42,12 +60,12 @@ else:
     soup = BeautifulSoup(r,'html.parser')
     num_results = soup.find_all('div',{'class':'result-count first'})[0].text
     # 14 results on a page but the top 2 featured don't count towards total
-    num_pages = int(int(num_results)/12)
+    num_pages = int(int(num_results.replace(',', ''))/12)
 
 # Create list of links to each listing page
 links = []
 for page in range(1, num_pages + 1):
-    print("Pages percent done: ", round(page/num_pages,3)*100)
+    print("Pages percent done: ", round((page/num_pages)*100, 3))
     url = create_page_url(page)
     r = urlopen(url)
     if r.getcode() == "404":
@@ -66,7 +84,7 @@ for page in range(1, num_pages + 1):
 # Go to each page and extract date available 
 avails = {}
 for i, link in enumerate(links):
-    print("Dates percent done: ", round(i/len(links),3)*100)
+    print("Dates percent done: ", round((i/len(links))*100, 3))
     r =urlopen("http://streeteasy.com" + link)
     if r.getcode() == "404":
         time.sleep(1)
@@ -89,7 +107,7 @@ for i, link in enumerate(links):
 # Go to each page and extract price
 prices = {}
 for i, link in enumerate(links):
-    print("Prices percent done: ", round(i/len(links),3)*100)
+    print("Prices percent done: ", round((i/len(links))*100, 3))
     r =urlopen("http://streeteasy.com" + link)
     if r.getcode() == "404":
         time.sleep(1)
@@ -102,12 +120,12 @@ for i, link in enumerate(links):
 
 # Create dataframe from results
 df1 = pd.DataFrame.from_dict(avails, orient = "index").reset_index()
-df1.columns = ['link', 'avail']
+df1.columns = ['link', 'date_avail']
 df2 = pd.DataFrame.from_dict(prices, orient = "index").reset_index()
 df2.columns = ['link', 'price']
 df = pd.merge(df1, df2, on = 'link')
-df = df.sort("avail", na_position = "last")
+df = df.sort_values("date_avail", na_position = "last")
 
 # Write to file with date in filename
-today = datetime.datetime.now().date().strftime("%m_%d")
-df.to_csv(today + "_listings.csv", index = False) 
+df['record_added'] = datetime.datetime.now().date().strftime("%Y-%m-%d")
+df.to_csv(args.outfile, index = False) 
