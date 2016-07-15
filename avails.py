@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+## StreatEasy Apartment Finder
+
 from __future__ import print_function
 from __future__ import division
 import pandas as pd
@@ -41,12 +43,12 @@ def create_search_url(price, area, min_beds, no_fee):
 
 search_url = create_search_url(price, area, beds, no_fee)
 print(search_url)
+print("Starting at " + str(datetime.datetime.now()))
 
 def create_page_url(page):
     return  search_url + str(page)
 
 # Get number of listings from first search page
-# FYI urllib: http://stackoverflow.com/questions/2792650
 url = create_page_url(1)
 r = urlopen(url)
 if r.getcode() == "404":
@@ -80,7 +82,7 @@ for page in range(1, num_pages + 1):
 # Go to each page and extract date available 
 avails = {}
 for i, link in enumerate(links):
-    print("Getting date for (", i, " of ", len(links), ") ", link)
+    print("Getting date for (", i + 1, " of ", len(links), ") ", link)
     r =urlopen("http://streeteasy.com" + link)
     if r.getcode() == "404":
         time.sleep(1)
@@ -103,25 +105,75 @@ for i, link in enumerate(links):
 # Go to each page and extract price
 prices = {}
 for i, link in enumerate(links):
-    print("Getting rent for (", i, " of ", len(links), ") ", link)
+    print("Getting rent for (", i + 1, " of ", len(links), ") ", link)
     r =urlopen("http://streeteasy.com" + link)
     if r.getcode() == "404":
         time.sleep(1)
     else:
-        r = r.read()
-        soup = BeautifulSoup(r,'html.parser')
-        div_set = soup.find_all('div',{'class':'price '})[0]
-        price = div_set.parent.text.split("\n")[3].strip()
-        prices["http://streeteasy.com" + link] = price
+        try:
+            r = r.read()
+            soup = BeautifulSoup(r,'html.parser')
+            div_set = soup.find_all('div',{'class':'price '})[0]
+            price = div_set.parent.text.split("\n")[3].strip()
+            prices["http://streeteasy.com" + link] = price
+        except(IndexError):
+            print("No Rent Listed.")
+
+# Go to each page and extract the description of the listing
+listingdesc = {}
+for i, link in enumerate(links):
+    print("Getting description for (", i + 1, " of ", len(links), ") ", link)
+    r = urlopen("http://streeteasy.com" + link)
+    if r.getcode() == "404":
+        time.sleep(1)
+    else:
+        try:
+            r = r.read()
+            soup = BeautifulSoup(r, 'html.parser')
+            div_set = soup.find_all('meta',{'name':'description'})[0]
+            div_set = div_set['content']
+            listingdesc["http://streeteasy.com" + link] = div_set
+        except(IndexError):
+            print("Description error.")
+
+# Go to each page and extract the amenities
+amenities = {}
+for i, link in enumerate(links):
+    print("Getting amenities for (", i + 1, " of ", len(links), ") ", link)
+    r = urlopen("http://streeteasy.com" + link)
+    if r.getcode() == "404":
+        time.sleep(1)
+    else:
+        try: 
+            r = r.read()
+            soup = BeautifulSoup(r, 'html.parser')
+            div_set = soup.find_all('div',{'class':'third'})
+            text_div_set = [x.text.strip().split("\n") for x in div_set]
+            # Flatten lists and remove whitespace
+            amenlist = [y.strip() for x in text_div_set for y in x if y.strip()]
+            # Test if not a googletag
+            amenlist2 = [x for x in amenlist if x[0].istitle()]
+            # Convert into string 
+            amenlist3 = ', '.join(amenlist2)
+            amenities["http://streeteasy.com" + link] = amenlist3
+        except(IndexError):
+            print("Amenities Error")
 
 # Create dataframe from results
 df1 = pd.DataFrame.from_dict(avails, orient = "index").reset_index()
 df1.columns = ['link', 'date_avail']
 df2 = pd.DataFrame.from_dict(prices, orient = "index").reset_index()
 df2.columns = ['link', 'rent']
+df3 = pd.DataFrame.from_dict(listingdesc, orient = "index").reset_index()
+df3.columns = ['link', 'listingdesc']
+df4 = pd.DataFrame.from_dict(amenities, orient = "index").reset_index()
+df4.columns = ['link', 'amenities']
 df = pd.merge(df1, df2, on = 'link')
+df = pd.merge(df, df3, on = 'link')
+df = pd.merge(df, df4, on = 'link')
 df = df.sort_values("date_avail", na_position = "last")
 
-# Write to file with date in filename
+# Write to file with date in column
 df['record_added'] = datetime.datetime.now().date().strftime("%Y-%m-%d")
 df.to_csv(args.outfile, index = False) 
+print("Ending at " + str(datetime.datetime.now()))
