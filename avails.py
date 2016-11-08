@@ -28,8 +28,11 @@ if __name__ == "__main__":
 # Also use search bar to identify if new parameters are needed
 price = args.min_price+"-"+args.max_price
 area = args.area
-beds = args.beds
-no_fee = args.no_fee # 1 gets only no fee apartment listings; leave blank if no preference 
+if args.beds[0] == '=':
+	beds = ':' + args.beds[1]
+else:
+	beds = args.beds
+no_fee = args.no_fee # 1 gets only no fee apartment listings; 0 gets none
 
 def create_search_url(price, area, min_beds, no_fee):
     start = 'http://streeteasy.com/for-rent/nyc/status:open'
@@ -38,7 +41,11 @@ def create_search_url(price, area, min_beds, no_fee):
     beds_param = "%7Cbeds"
     fee_param = "%7Cno_fee:"
     page_param = "?page="
-    url = start + price_param + price + area_param + area + beds_param + beds + fee_param + no_fee + page_param
+    url = start + price_param + price + area_param + area + beds_param + beds
+    if no_fee in ['1', '0']:
+    	url = url + fee_param + no_fee + page_param
+    else:
+    	url = url + page_param
     return url
 
 search_url = create_search_url(price, area, beds, no_fee)
